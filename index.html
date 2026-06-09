@@ -1,0 +1,1674 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>狼人殺旁白系統 - 大威老師製作 (6人局精簡版)</title>
+    <style>
+        /* 倒計時顯示器 */
+        #countdown-display {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 15rem;
+            font-weight: 900;
+            color: white;
+            -webkit-text-stroke: 5px #ff4b2b;
+            z-index: 1000;
+            pointer-events: none;
+            display: none;
+        }
+
+        .countdown-animate {
+            animation: zoomInOut 1s ease-in-out;
+        }
+
+        @keyframes zoomInOut {
+            0% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        /* --- 圖片狼爪效果 --- */
+        .claw-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(1.5);
+            width: 120%; 
+            height: auto;
+            z-index: 50; 
+            pointer-events: none; 
+            display: none; 
+            opacity: 0;
+            filter: drop-shadow(0 0 10px rgba(0,0,0,0.8));
+        }
+
+        /* 當被標記為狼人目標時顯示圖片並啟動動畫 */
+        .wolf-target .claw-overlay {
+            display: block;
+            animation: claw-attack 0.3s forwards ease-out;
+        }
+
+        @keyframes claw-attack {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(2); }
+            100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+
+        body {
+            user-select: none;
+            -webkit-user-select: none;
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+            font-family: "Microsoft JhengHei", sans-serif;
+            margin: 0;
+            padding: 20px;
+            overflow: hidden; 
+        }
+
+        .author-tag {
+            position: absolute; top: 20px; right: 30px;
+            font-size: 1.2rem; color: #ffd700; font-weight: bold;
+        }
+
+        h1 {
+            text-align: center; font-size: 3rem; color: #ffffff;
+            margin-bottom: 10px; text-shadow: 0 0 15px #ff4b2b; letter-spacing: 10px;
+        }
+
+        .rules-container {
+            background: rgba(255, 255, 255, 0.05); padding: 15px 25px;
+            border-radius: 15px; border: 1px solid #444;
+            max-width: 1000px; margin: 0 auto 10px auto; line-height: 1.5;
+        }
+
+        .rules-title {
+            font-size: 1.3rem; color: #00d4ff; margin-bottom: 8px;
+            border-bottom: 1px solid #00d4ff; display: inline-block;
+        }
+
+        .rules-content { display: flex; justify-content: space-between; gap: 30px; }
+        .rule-column { flex: 1; font-size: 0.95rem; }
+        .highlight { color: #ff4b2b; font-weight: bold; }
+
+        .flow-container {
+            display: flex; justify-content: center; align-items: center;
+            gap: 10px; margin: 15px auto; max-width: 1100px; flex-wrap: wrap;
+        }
+        .flow-item {
+            background: rgba(0, 212, 255, 0.1); border: 1px solid #00d4ff;
+            padding: 8px 12px; border-radius: 5px; font-size: 1rem;
+            color: #00d4ff; font-weight: bold; transition: 0.3s; cursor: pointer;
+        }
+        .flow-item:hover { background: rgba(0, 212, 255, 0.3); transform: scale(1.05); }
+        .flow-divider { color: #555; font-size: 1.5rem; }
+
+        .btn-container { text-align: center; margin-bottom: 15px; }
+        .btn {
+            padding: 10px 25px; font-size: 1.1rem; border-radius: 30px; border: none;
+            cursor: pointer; font-weight: bold; transition: 0.3s; margin: 0 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .btn-assign { background: #ff4b2b; color: white; }
+        .btn-start { background: #4caf50; color: white; display: none; }
+
+        .player-area { position: relative; width: 100%; height: 220px; margin-top: 20px; }
+        .player-slot {
+            width: 110px; height: 155px; background: #232344; border: 2px solid #555;
+            border-radius: 15px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; position: absolute;
+            cursor: pointer; transition: all 0.4s; transform: translateX(-50%);
+        }
+
+        .card-img { width: 100%; height: 100%; object-fit: cover; border-radius: 13px; display: none; z-index: 10; }
+        .is-flipped { border-color: #ffd700; background: #fff; }
+        .is-flipped .card-img { display: block; }
+        .is-flipped .player-number { display: none; }
+
+        .eliminated { border-color: #ff4b2b !important; opacity: 0.4; filter: grayscale(1); }
+        .eliminated::after {
+            content: "OUT"; position: absolute; color: #ff4b2b; font-size: 2.2rem;
+            font-weight: 900; border: 4px solid #ff4b2b; padding: 2px 8px;
+            transform: rotate(-25deg); background: rgba(0,0,0,0.2); z-index: 30;
+        }
+
+        .player-number { font-size: 3rem; font-weight: bold; color: #fff; }
+        .status-label { font-size: 0.8rem; color: #888; position: absolute; bottom: 8px; z-index: 40; }
+
+        /* 🎯 重新設計 6 人局等距置中排版 */
+        .slot-1 { left: 14%; } .slot-2 { left: 28%; } .slot-3 { left: 43%; }
+        .slot-4 { left: 57%; } .slot-5 { left: 71%; } .slot-6 { left: 85%; }
+
+        .good-win-style {
+            background-color: transparent !important; 
+            color: #FFD700 !important; 
+            text-shadow: 8px 8px 0px #000, -2px -2px 0px #000, 2px -2px 0px #000, -2px 2px 0px #000, 0px 0px 20px rgba(0,0,0,0.5);
+        }
+
+        .wolf-win-style {
+            background-color: transparent !important;
+            color: #FF0000 !important; 
+            text-shadow: 10px 10px 0px #000, -3px -3px 0px #000, 3px -3px 0px #000, -3px 3px 0px #000, 0px 0px 30px rgba(0,0,0,0.8);
+        }
+
+        button:disabled {
+            background-color: #555566 !important;
+            color: #888899 !important;
+            cursor: not-allowed !important;
+            opacity: 0.6;
+        }
+        .is-speaking {
+            border-color: #ff9800 !important;
+            box-shadow: 0 0 20px #ff9800;
+            animation: pulse-border 1.5s infinite;
+        }
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 5px #ff9800; }
+            50% { box-shadow: 0 0 25px #ff9800; }
+            100% { box-shadow: 0 0 5px #ff9800; }
+        }
+        .vote-targeted {
+            border-color: #ff4b2b !important;
+            box-shadow: 0 0 20px rgba(255, 75, 43, 0.8) !important;
+        }
+        .is-pk-speaking {
+            border-color: #00d4ff !important;
+            box-shadow: 0 0 20px #00d4ff;
+            animation: pulse-pk-border 1.5s infinite;
+        }
+        @keyframes pulse-pk-border {
+            0% { box-shadow: 0 0 5px #00d4ff; }
+            50% { box-shadow: 0 0 25px #00d4ff; }
+            100% { box-shadow: 0 0 5px #00d4ff; }
+        }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+    <div class="author-tag">大威老師製作</div>
+    <h1>狼人殺 (6人局)</h1>
+    <div id="countdown-display">10</div>
+
+    <div class="rules-container">
+        <div class="rules-title">遊戲規則</div>
+        <div class="rules-content">
+            <div class="rule-column">
+                <p><span class="highlight">● 獲勝條件：</span><br>
+                【好人】找出所有狼人並投票出局。<br>
+                【狼人】殺光所有「平民」或殺光所有「神職」。</p>
+                <p><span class="highlight">● 狼人陣營(2位)：</span><br>
+                每晚可殺死一名玩家。只有<span class="highlight">第一晚</span>被殺的人才有遺言。</p>
+            </div>
+            <div class="rule-column">
+                <p><span class="highlight">● 好人陣營(4位)：</span><br>
+                - <b>預言家(1位)</b>：每晚可查驗一人的陣營。<br>
+                - <b>女巫(1位)</b>：有解藥與毒藥各一瓶。只有<span class="highlight">第一晚</span>被毒的人才有遺言。<br>
+                - <b>平民(2位)</b>：無功能，靠邏輯分析找出狼人。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="flow-container">
+        <div class="flow-item" onclick="autoConfirmIdentity()">確認身份</div>
+        <div class="flow-divider">|</div>
+        <div class="flow-item" id="nightBtn" onclick="nextNight()">天黑請閉眼</div>
+        <div class="flow-item" onclick="playSound('wolfopen')">狼人請睜眼</div>
+        <div class="flow-item" onclick="playWitchPhase()">女巫請睜眼</div>
+        <div class="flow-item" onclick="playProphetPhase()">預言家請睜眼</div>
+        <div class="flow-item" onclick="playSound('morning')">天亮請睜眼</div>
+        <div class="flow-item" id="speakFinishBtn" onclick="nextSpeaker()">發言完畢</div>
+        <div class="flow-item" id="confirmVoteBtn" onclick="confirmVoteResult()" style="display: none; background: rgba(255, 75, 43, 0.2); border-color: #ff4b2b; color: #ff4b2b;">️「確認投票結果」</div>
+    </div>
+
+    <div class="btn-container">
+        <button class="btn btn-assign" onclick="assignRoles()">🔮 隨機分配身分 (蓋牌)</button>
+        <button class="btn btn-start" id="startBtn" onclick="startGame()">⚔️ 確認完畢，開始遊戲</button>
+    </div>
+
+   <div class="player-area">
+        <div id="p1" class="player-slot slot-1" onclick="handleSlotClick(this)"><span class="player-number">1</span><img class="card-img"><img class="claw-overlay" src="image/wolfclaw.png"><span class="status-label"></span></div>
+        <div id="p2" class="player-slot slot-2" onclick="handleSlotClick(this)"><span class="player-number">2</span><img class="card-img"><img class="claw-overlay" src="image/wolfclaw.png"><span class="status-label"></span></div>
+        <div id="p3" class="player-slot slot-3" onclick="handleSlotClick(this)"><span class="player-number">3</span><img class="card-img"><img class="claw-overlay" src="image/wolfclaw.png"><span class="status-label"></span></div>
+        <div id="p4" class="player-slot slot-4" onclick="handleSlotClick(this)"><span class="player-number">4</span><img class="card-img"><img class="claw-overlay" src="image/wolfclaw.png"><span class="status-label"></span></div>
+        <div id="p5" class="player-slot slot-5" onclick="handleSlotClick(this)"><span class="player-number">5</span><img class="card-img"><img class="claw-overlay" src="image/wolfclaw.png"><span class="status-label"></span></div>
+        <div id="p6" class="player-slot slot-6" onclick="handleSlotClick(this)"><span class="player-number">6</span><img class="card-img"><img class="claw-overlay" src="image/wolfclaw.png"><span class="status-label"></span></div>
+    </div>
+
+    <div id="witch-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; flex-direction:column; justify-content:center; align-items:center; color:white;">
+        <div style="background:#232344; padding:30px; border-radius:20px; border:3px solid #00d4ff; text-align:center;">
+            <h2 id="witch-title" style="font-size:2rem; margin-bottom:10px;">?號玩家被殺，要救他嗎？</h2>
+            <img id="witch-item-img" src="" style="width:100px; height:auto; margin:10px 0;">
+            <div id="witch-timer-display" style="font-size:4rem; color:#ff4b2b; font-weight:bold; margin:20px 0;">8</div>
+            <div>
+                <button id="witch-yes-btn" onclick="witchDecision(true)" style="padding:10px 30px; font-size:1.5rem; background:#4caf50; color:white; border:none; border-radius:10px; cursor:pointer; margin-right:20px;">是 (確認)</button>
+                <button id="witch-no-btn" onclick="witchDecision(false)" style="padding:10px 30px; font-size:1.5rem; background:#ff4b2b; color:white; border:none; border-radius:10px; cursor:pointer;">否 (取消)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-result-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; justify-content: center; align-items: center; font-size: 150px; font-weight: 900; letter-spacing: 30px; cursor: pointer; background-color: transparent; pointer-events: auto; text-align: center;">
+        <div id="result-text"></div>
+    </div>
+
+    <script>
+        const audioList = {
+            morning: new Audio("audio/morning.mp3"),
+            night: new Audio("audio/night.mp3"),
+            openeyes: new Audio("audio/openeyes.mp3"),
+            prophetopen: new Audio("audio/prophetopen.mp3"), 
+            prophetclose: new Audio("audio/prophetclose.mp3"),
+            heis: new Audio("audio/heis.mp3"),
+            startspeak: new Audio("audio/startspeak.mp3"),
+            witchopen: new Audio("audio/witchopen.mp3"),
+            witchclose: new Audio("audio/witchclose.mp3"),
+            wolfclose: new Audio("audio/wolfclose.mp3"),
+            wolfopen: new Audio("audio/wolfopen.mp3"),
+            bekilled: new Audio("audio/bekilled.mp3"),
+            bgm: new Audio("audio/BGM.mp3"),
+            closeeyes: new Audio("audio/closeeyes.mp3"),
+            confirmid: new Audio("audio/confirmid.mp3"),
+            gameplay: new Audio("audio/gameplay.mp3"),
+            number1: new Audio("audio/number1.mp3"),
+            number2: new Audio("audio/number2.mp3"),
+            number3: new Audio("audio/number3.mp3"),
+            number4: new Audio("audio/number4.mp3"),
+            number5: new Audio("audio/number5.mp3"),
+            number6: new Audio("audio/number6.mp3"),
+            gameover: new Audio("audio/gameover.mp3"),
+            goodwin: new Audio("audio/goodwin.mp3"),
+            witchusepoison : new Audio("audio/witchusepoison.mp3"),
+            peaceful: new Audio("audio/peaceful.mp3"),
+            vote: new Audio("audio/vote.mp3"),
+            wolfwin: new Audio("audio/wolfwin.mp3"),
+            lastword: new Audio("audio/lastword.mp3"),  
+            disuse: new Audio("audio/disuse.mp3")        
+        };
+        audioList.bgm.loop = true;
+
+        let isGameStarted = false;
+        let roleData = [];
+        let isWolfTurn = false;
+        let wolfTimer = null;
+        let wolfSelected = false;
+        let canEliminate = false;
+        let witchTimer = null;
+        let witchHasCure = true;
+        let witchHasPoison = true;
+        let witchPhase = 1;
+        let poisonTarget = null;  
+        let lastWolfTarget = null;
+        let nightCount = 0;
+        let canPoisonClick = false;
+        let witchUsedCureThisNight = false;
+        let isProphetTurn = false;   
+        let prophetTimer = null;     
+        let prophetSelected = false;
+        let speakingList = [];      
+        let currentSpeakIdx = -1;   
+        let speechTimer = null;     
+        let speechTimeLeft = 60;    
+        let voteTimer = null;        
+        let isVotePhase = false;      
+        let currentVoteVictimNum = null;
+        let witchAutoCloseTimer = null; 
+        let pkPlayers = [];        
+        let isPkVotePhase = false;   
+        let pkRoundCount = 0;      
+        let firstNightDeaths = [];   
+        let currentFirstNightIdx = -1; 
+
+        const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        function nextNight() {
+            if (!isGameStarted) return;
+            nightCount++;
+            witchUsedCureThisNight = false;
+            document.getElementById('nightBtn').innerText = `天黑請閉眼 (第 ${nightCount} 晚)`;
+            playSound('night');
+        }
+
+        function playWitchPhase() {
+            witchPhase = 1;
+            canPoisonClick = false;
+            playSound('witchopen'); 
+            
+            let witchIndex = roleData.indexOf('witch.jpg');
+            let isWitchDead = false;
+            if (witchIndex !== -1) {
+                const witchSlot = document.getElementById(`p${witchIndex + 1}`);
+                if (witchSlot && witchSlot.classList.contains('eliminated')) {
+                    isWitchDead = true; 
+                }
+            }
+
+            setTimeout(() => {
+                if (!isWitchDead && witchHasCure) {
+                    const victimNum = lastWolfTarget ? lastWolfTarget.replace('p', '') : "沒人";
+                    showWitchUI(`${victimNum} 號被殺，要救他嗎？`, "image/cure.png", false);
+                } else {
+                    console.log("【夜間防漏】女巫已死或無解藥，空轉過場。");
+                    setTimeout(() => {
+                        startPoisonPhase();
+                    }, 4000); 
+                }
+            }, 2000);
+        }
+
+        function processFirstNightDeathChain() {
+            if (currentFirstNightIdx >= firstNightDeaths.length) {
+                console.log("【第一晚遺言鏈】所有人發表完畢。開始對接白天常規發言...");
+                
+                let baseDeadNum = firstNightDeaths[0]; 
+                let nextSpeakerNum = baseDeadNum;
+                let foundLogicalSpeaker = false;
+
+                for (let i = 1; i <= 6; i++) {
+                    let testNum = ((baseDeadNum - 1 + i) % 6) + 1;
+                    const testSlot = document.getElementById(`p${testNum}`);
+                    if (testSlot && !testSlot.classList.contains('eliminated')) {
+                        nextSpeakerNum = testNum;
+                        foundLogicalSpeaker = true;
+                        break;
+                    }
+                }
+
+                const finishBtn = document.getElementById('speakFinishBtn');
+                if (finishBtn) {
+                    finishBtn.onclick = function() { nextSpeaker(); };
+                }
+
+                if (checkGameResult()) {
+                    currentFirstNightIdx = -1;
+                    firstNightDeaths = [];
+                    return;
+                }
+
+                if (foundLogicalSpeaker) {
+                    window.currentSpeaker = nextSpeakerNum; 
+                    startSpeakerTurn(); 
+                } else {
+                    checkGameResult();
+                }
+
+                currentFirstNightIdx = -1;
+                firstNightDeaths = [];
+                return;
+            }
+
+            const currentDeadNum = firstNightDeaths[currentFirstNightIdx];
+            const slot = document.getElementById(`p${currentDeadNum}`);
+            
+            if (slot) {
+                slot.classList.add('is-speaking');
+                slot.querySelector('.status-label').innerText = "發表遺言";
+            }
+
+            if (audioList['bekilled'] && audioList[`number${currentDeadNum}`]) {
+                audioList['bekilled'].currentTime = 0;
+                audioList['bekilled'].play().then(() => {
+                    audioList['bekilled'].onended = () => {
+                        audioList[`number${currentDeadNum}`].currentTime = 0;
+                        audioList[`number${currentDeadNum}`].play().then(() => {
+                            audioList[`number${currentDeadNum}`].onended = () => {
+                                setTimeout(() => {
+                                    startFirstNightSpeakerSpeech(currentDeadNum);
+                                }, 800); 
+                            };
+                        }).catch(e => console.log(e));
+                    };
+                }).catch(e => console.log(e));
+            } else {
+                startFirstNightSpeakerSpeech(currentDeadNum); 
+            }
+
+            const finishBtn = document.getElementById('speakFinishBtn');
+            if (finishBtn) {
+                finishBtn.onclick = function() {
+                    finishFirstNightSpeaker(currentDeadNum);
+                };
+            }
+        }
+
+        function startFirstNightSpeakerSpeech(playerNum) {
+            const numAudio = audioList[`number${playerNum}`];
+            const lastwordAudio = audioList['lastword'];
+
+            if (numAudio && lastwordAudio) {
+                numAudio.currentTime = 0;
+                numAudio.play().then(() => {
+                    numAudio.onended = () => {
+                        lastwordAudio.currentTime = 0;
+                        lastwordAudio.play().catch(e => console.log(e));
+                    };
+                }).catch(e => console.log(e));
+            }
+
+            speechTimeLeft = 60;
+            const display = document.getElementById('countdown-display');
+            if (display) {
+                display.innerText = speechTimeLeft;
+                display.style.display = 'block';
+            }
+
+            clearInterval(speechTimer);
+            speechTimer = setInterval(() => {
+                speechTimeLeft--;
+                if (display) display.innerText = speechTimeLeft;
+
+                if (speechTimeLeft <= 0) {
+                    clearInterval(speechTimer);
+                    finishFirstNightSpeaker(playerNum);
+                }
+            }, 1000);
+        }
+
+        function finishFirstNightSpeaker(playerNum) {
+            clearInterval(speechTimer);
+            if (document.getElementById('countdown-display')) {
+                document.getElementById('countdown-display').style.display = 'none';
+            }
+
+            const slot = document.getElementById(`p${playerNum}`);
+            if (slot) {
+                slot.classList.remove('is-speaking');
+                slot.querySelector('.status-label').innerText = "已出局";
+            }
+
+            if (audioList['disuse']) {
+                audioList['disuse'].currentTime = 0;
+                audioList['disuse'].play().catch(e => console.log(e));
+            }
+
+            currentFirstNightIdx++;
+            setTimeout(() => {
+                processFirstNightDeathChain();
+            }, 1500);
+        }
+
+        function startPoisonPhase() {
+            witchPhase = 2;
+            document.getElementById('witch-overlay').style.display = 'none';
+            
+            let witchIndex = roleData.indexOf('witch.jpg');
+            let isWitchDead = false;
+            if (witchIndex !== -1) {
+                const witchSlot = document.getElementById(`p${witchIndex + 1}`);
+                if (witchSlot && witchSlot.classList.contains('eliminated')) {
+                    isWitchDead = true;
+                }
+            }
+
+            setTimeout(() => {
+                playSound('witchusepoison');
+                
+                setTimeout(() => {
+                    if (isWitchDead || !witchHasPoison) {
+                        console.log("【夜間防漏】女巫已死或無毒藥，空轉後閉眼。");
+                        setTimeout(() => {
+                            finishWitchTurn();
+                        }, 5000);
+                    } else {
+                        if (witchUsedCureThisNight) {
+                            showWitchUI("你要使用毒藥嗎？(同晚不可雙藥)", "image/poison.png", true);
+                            canPoisonClick = false; 
+                            clearTimeout(witchAutoCloseTimer);
+                            witchAutoCloseTimer = setTimeout(() => {
+                                finishWitchTurn();
+                            }, 5000);
+                        } else {
+                            showWitchUI("你要使用毒藥嗎？", "image/poison.png", false);
+                            canPoisonClick = true; 
+                        }
+                    }
+                }, 2000);
+            }, 1000);
+        }
+
+        function showWitchUI(title, imgSrc, disableYesButton) {
+            document.getElementById('witch-title').innerText = title;
+            document.getElementById('witch-item-img').src = imgSrc;
+            document.getElementById('witch-yes-btn').disabled = !!disableYesButton;
+            document.getElementById('witch-overlay').style.display = 'flex';
+            startWitchCountdown();
+        }
+
+        function startWitchCountdown() {
+            clearInterval(witchTimer);
+            let count = 8;
+            const display = document.getElementById('witch-timer-display');
+            display.innerText = count;
+            witchTimer = setInterval(() => {
+                count--;
+                display.innerText = count;
+                if (count <= 0) {
+                    witchDecision(false);
+                }
+            }, 1000);
+        }
+
+        function witchDecision(choice) {
+            clearInterval(witchTimer);
+            clearTimeout(witchAutoCloseTimer);
+
+            if (witchPhase === 1) {
+                if (choice && lastWolfTarget) {
+                    lastWolfTarget = null;
+                    witchHasCure = false;
+                    witchUsedCureThisNight = true;
+                }
+                startPoisonPhase();
+            } else {
+                if (choice) {
+                    canPoisonClick = true;
+                    witchHasPoison = false;
+                    document.getElementById('witch-overlay').style.display = 'none';
+                    let poisonCount = 8;
+                    const display = document.getElementById('countdown-display');
+                    if (display) {
+                        display.innerText = poisonCount;
+                        display.style.display = 'block';
+                        witchTimer = setInterval(() => {
+                            poisonCount--;
+                            display.innerText = poisonCount;
+                            if (poisonCount <= 0) {
+                                clearInterval(witchTimer);
+                                display.style.display = 'none';
+                                finishWitchTurn();
+                            }
+                        }, 1000);
+                    }
+                } else {
+                    finishWitchTurn();
+                }
+            }
+        }
+
+        function finishWitchTurn() {
+            clearTimeout(witchAutoCloseTimer); 
+            document.getElementById('witch-overlay').style.display = 'none';
+            canPoisonClick = false;
+            document.getElementById('witch-yes-btn').disabled = false;
+            playSound('witchclose');
+        }
+
+        function playProphetPhase() {
+            if (!isGameStarted) return alert("請先開始遊戲！");
+            isProphetTurn = true;
+            prophetSelected = false;
+            canEliminate = false;
+            playSound('prophetopen');
+
+            setTimeout(() => {
+                let count = 8;
+                const display = document.getElementById('countdown-display');
+                display.innerText = count;
+                display.style.display = 'block';
+
+                clearInterval(prophetTimer);
+                prophetTimer = setInterval(() => {
+                    count--;
+                    display.innerText = count;
+                    if (count <= 0) {
+                        clearInterval(prophetTimer);
+                        display.style.display = 'none';
+                        endProphetPhase();
+                    }
+                }, 1000);
+            }, 2000); 
+        }
+
+        async function endProphetPhase() {
+            isProphetTurn = false;
+            document.getElementById('countdown-display').style.display = 'none';
+            playSound('prophetclose');
+        }
+
+        function playSound(name) {
+            if (audioList[name]) {
+                if (['night', 'wolfopen', 'witchopen', 'prophetopen'].includes(name)) {
+                    canEliminate = false;
+                }
+                if (name === 'night') {
+                    audioList.bgm.currentTime = 0;
+                    audioList.bgm.play().catch(e => console.log("BGM播放被攔截"));
+                }
+                
+                if (name === 'morning') {
+                    audioList.bgm.pause();
+                    isWolfTurn = false;
+                    canEliminate = true; 
+
+                    audioList[name].onended = function() {
+                        let deathList = [];
+
+                        if (lastWolfTarget) {
+                            const victim = document.getElementById(lastWolfTarget);
+                            if (victim && !victim.classList.contains('eliminated')) {
+                                victim.classList.add('eliminated');
+                                victim.querySelector('.status-label').innerText = "被狼殺害";
+                                deathList.push(lastWolfTarget.replace('p', '') + "號(狼殺)");
+                            }
+                        }
+                        
+                        if (poisonTarget) {
+                            const victim = document.getElementById(poisonTarget);
+                            if (victim && !victim.classList.contains('eliminated')) {
+                                victim.classList.add('eliminated');
+                                victim.querySelector('.status-label').innerText = "被毒出局";
+                                deathList.push(poisonTarget.replace('p', '') + "號(毒殺)");
+                            }
+                        }
+
+                        if (deathList.length > 0) {
+                            if (lastWolfTarget) {
+                                const victim = document.getElementById(lastWolfTarget);
+                                if (victim) victim.querySelector('.status-label').innerText = "昨晚出局";
+                            }
+                            if (poisonTarget) {
+                                const victim = document.getElementById(poisonTarget);
+                                if (victim) victim.querySelector('.status-label').innerText = "昨晚出局";
+                            }
+
+                            let deadNums = [];
+                            if (lastWolfTarget) deadNums.push(parseInt(lastWolfTarget.replace('p', '')));
+                            if (poisonTarget) {
+                                let pNum = parseInt(poisonTarget.replace('p', ''));
+                                if (!deadNums.includes(pNum)) deadNums.push(pNum);
+                            }
+
+                            // ─── 【 情況 A：第一晚（有遺言流程）】 ───
+                            if (nightCount === 1) {
+                                let killAudio = audioList['bekilled'] || new Audio('audio/bekilled.mp3'); 
+                                killAudio.currentTime = 0;
+                                killAudio.play().catch(e => console.log(e));
+
+                                setTimeout(() => {
+                                    if (audioList[`number${deadNums[0]}`]) {
+                                        audioList[`number${deadNums[0]}`].currentTime = 0;
+                                        audioList[`number${deadNums[0]}`].play().catch(e => console.log(e));
+                                    }
+                                    
+                                    if (deadNums.length > 1) {
+                                        setTimeout(() => {
+                                            if (audioList[`number${deadNums[1]}`]) {
+                                                audioList[`number${deadNums[1]}`].currentTime = 0;
+                                                audioList[`number${deadNums[1]}`].play().catch(e => console.log(e));
+                                            }
+                                            setTimeout(() => { startLastWordPhase(); }, 1500);
+                                        }, 1200);
+                                    } else {
+                                        setTimeout(() => { startLastWordPhase(); }, 1500);
+                                    }
+                                }, 1500);
+
+                                function startLastWordPhase() {
+                                    let speechOrder = [...deadNums].sort(() => Math.random() - 0.5);
+                                    let speechIdx = 0;
+                                    let introTimeout = null;
+
+                                    function runNextSpeech() {
+                                        document.getElementById('speakFinishBtn').onclick = null; 
+                                        clearInterval(speechTimer); 
+
+                                        if (speechIdx >= speechOrder.length) {
+                                            if (document.getElementById('countdown-display')) {
+                                                document.getElementById('countdown-display').style.display = 'none';
+                                            }
+                                            let baseDeadNum = (deadNums && deadNums.length > 0) ? deadNums[Math.floor(Math.random() * deadNums.length)] : 1;
+                                            let nextSpeakerNum = baseDeadNum;
+                                            let foundSpeaker = false;
+                                            for (let i = 1; i <= 6; i++) {
+                                                let testNum = ((baseDeadNum - 1 + i) % 6) + 1;
+                                                const testSlot = document.getElementById(`p${testNum}`);
+                                                if (testSlot && !testSlot.classList.contains('eliminated')) {
+                                                    nextSpeakerNum = testNum;
+                                                    foundSpeaker = true;
+                                                    break;
+                                                }
+                                            }
+                                            document.getElementById('speakFinishBtn').onclick = function() { nextSpeaker(); };
+                                            lastWolfTarget = null;
+                                            poisonTarget = null;
+                                            if (!checkGameResult() && foundSpeaker) {
+                                                window.currentSpeaker = nextSpeakerNum; 
+                                                initDayDiscussion(); 
+                                            }
+                                            return;
+                                        }
+
+                                        let currentDead = speechOrder[speechIdx];
+                                        const slot = document.getElementById(`p${currentDead}`);
+                                        if (slot) {
+                                            slot.classList.add('is-speaking');
+                                            slot.querySelector('.status-label').innerText = "發表遺言";
+                                        }
+                                        if (audioList[`number${currentDead}`]) {
+                                            audioList[`number${currentDead}`].currentTime = 0;
+                                            audioList[`number${currentDead}`].play().catch(e => console.log(e));
+                                        }
+
+                                        document.getElementById('speakFinishBtn').onclick = function() {
+                                            clearTimeout(introTimeout); 
+                                            handleDeadSpeechFinish();
+                                        };
+
+                                        introTimeout = setTimeout(() => {
+                                            if (audioList['lastword']) {
+                                                audioList['lastword'].currentTime = 0;
+                                                audioList['lastword'].play().catch(e => console.log(e));
+                                            }
+                                            speechTimeLeft = 60;
+                                            const display = document.getElementById('countdown-display');
+                                            if (display) {
+                                                display.innerText = speechTimeLeft;
+                                                display.style.display = 'block';
+                                            }
+                                            clearInterval(speechTimer);
+                                            speechTimer = setInterval(() => {
+                                                speechTimeLeft--;
+                                                if (display) display.innerText = speechTimeLeft;
+                                                if (speechTimeLeft <= 0) {
+                                                    clearInterval(speechTimer);
+                                                    handleDeadSpeechFinish();
+                                                }
+                                            }, 1000);
+                                            document.getElementById('speakFinishBtn').onclick = function() {
+                                                handleDeadSpeechFinish();
+                                            };
+                                        }, 1200);
+
+                                        function handleDeadSpeechFinish() {
+                                            document.getElementById('speakFinishBtn').onclick = null; 
+                                            clearInterval(speechTimer);
+                                            if (document.getElementById('countdown-display')) {
+                                                document.getElementById('countdown-display').style.display = 'none';
+                                            }
+                                            if (slot) {
+                                                slot.classList.remove('is-speaking');
+                                                slot.querySelector('.status-label').innerText = "已出局";
+                                            }
+                                            if (audioList['disuse']) {
+                                                audioList['disuse'].currentTime = 0;
+                                                audioList['disuse'].play().catch(e => console.log(e));
+                                            }
+                                            speechIdx++;
+                                            setTimeout(() => { runNextSpeech(); }, 1500);
+                                        }
+                                    }
+                                    runNextSpeech();
+                                }
+
+                            } else {
+                                // ─── 【 情況 B：常規夜晚 】 ───
+                                document.getElementById('speakFinishBtn').onclick = function() { nextSpeaker(); };
+                                
+                                if (!checkGameResult()) {
+                                    let killAudio = audioList['bekilled'] || new Audio('audio/bekilled.mp3'); 
+                                    killAudio.currentTime = 0;
+                                    killAudio.play().then(() => {
+                                        setTimeout(() => { playDeadNumbers(); }, 800);
+                                    }).catch(e => { playDeadNumbers(); });
+
+                                    function playDeadNumbers() {
+                                        if (!deadNums || deadNums.length === 0) {
+                                            playDisuseAndStartDay();
+                                            return;
+                                        }
+                                        if (audioList[`number${deadNums[0]}`]) {
+                                            audioList[`number${deadNums[0]}`].currentTime = 0;
+                                            audioList[`number${deadNums[0]}`].play().then(() => {
+                                                audioList[`number${deadNums[0]}`].onended = () => {
+                                                    if (deadNums.length > 1 && audioList[`number${deadNums[1]}`]) {
+                                                        setTimeout(() => {
+                                                            audioList[`number${deadNums[1]}`].currentTime = 0;
+                                                            audioList[`number${deadNums[1]}`].play().then(() => {
+                                                                audioList[`number${deadNums[1]}`].onended = () => {
+                                                                    playDisuseAndStartDay();
+                                                                };
+                                                            }).catch(e => playDisuseAndStartDay());
+                                                        }, 500); 
+                                                    } else {
+                                                        playDisuseAndStartDay(); 
+                                                    }
+                                                };
+                                            }).catch(e => playDisuseAndStartDay());
+                                        } else {
+                                            playDisuseAndStartDay();
+                                        }
+                                    }
+
+                                    function playDisuseAndStartDay() {
+                                        setTimeout(() => {
+                                            if (audioList['disuse']) {
+                                                audioList['disuse'].currentTime = 0;
+                                                audioList['disuse'].play().then(() => {
+                                                    audioList['disuse'].onended = () => {
+                                                        triggerDayDiscussion();
+                                                    };
+                                                }).catch(e => triggerDayDiscussion());
+                                            } else {
+                                                triggerDayDiscussion();
+                                            }
+                                        }, 600); 
+                                    }
+
+                                    function triggerDayDiscussion() {
+                                        setTimeout(() => {
+                                            let baseDeadNum = (deadNums && deadNums.length > 0) ? (deadNums.length > 1 ? deadNums[Math.floor(Math.random() * deadNums.length)] : deadNums[0]) : 1;
+                                            let nextSpeakerNum = baseDeadNum;
+                                            let foundSpeaker = false;
+                                            for (let i = 1; i <= 6; i++) {
+                                                let testNum = ((baseDeadNum - 1 + i) % 6) + 1;
+                                                const testSlot = document.getElementById(`p${testNum}`);
+                                                if (testSlot && !testSlot.classList.contains('eliminated')) {
+                                                    nextSpeakerNum = testNum;
+                                                    foundSpeaker = true;
+                                                    break;
+                                                }
+                                            }
+                                            lastWolfTarget = null;
+                                            poisonTarget = null;
+                                            if (foundSpeaker) {
+                                                window.currentSpeaker = nextSpeakerNum; 
+                                                initDayDiscussion(); 
+                                            }
+                                        }, 800); 
+                                    }
+
+                                } else {
+                                    lastWolfTarget = null;
+                                    poisonTarget = null;
+                                }
+                            }
+
+                        } else {
+                            // ─── 🕊️ 【平安夜流程】 ───
+                            document.getElementById('speakFinishBtn').onclick = function() { nextSpeaker(); };
+                            if (audioList['peaceful']) {
+                                audioList['peaceful'].currentTime = 0;
+                                audioList['peaceful'].play().catch(e => console.log(e));
+                            }
+                            lastWolfTarget = null;
+                            poisonTarget = null;
+                            let alivePlayers = [];
+                            for (let i = 1; i <= 6; i++) {
+                                const slot = document.getElementById(`p${i}`);
+                                if (slot && !slot.classList.contains('eliminated')) {
+                                    alivePlayers.push(i);
+                                }
+                            }
+                            if (alivePlayers.length > 0 && !checkGameResult()) {
+                                let randomStartSpeaker = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+                                setTimeout(() => {
+                                    window.currentSpeaker = randomStartSpeaker;
+                                    initDayDiscussion(); 
+                                }, 1500);
+                            }
+                        }
+                    };
+                }
+                
+                if (name === 'wolfopen') {
+                    isWolfTurn = true; 
+                    audioList[name].onended = async function() {
+                        for (let i = 1; i <= 6; i++) {
+                            const slot = document.getElementById(`p${i}`);
+                            if (roleData[i-1] === 'werewolf.jpg' && !slot.classList.contains('eliminated')) {
+                                slot.classList.add('is-flipped');
+                            }
+                        }
+                        await wait(2000);
+                        startWolfCountdown();
+                    };
+                }
+                audioList[name].currentTime = 0;
+                audioList[name].play().catch(e => console.log("音效播放攔截"));
+            }
+        }
+
+       function initDayDiscussion() {
+            let alivePlayers = [];
+            for (let i = 1; i <= 6; i++) {
+                const slot = document.getElementById(`p${i}`);
+                if (slot && !slot.classList.contains('eliminated')) {
+                    alivePlayers.push(i);
+                }
+            }
+
+            if (alivePlayers.length === 0) return;
+
+            let startIdx;
+            if (window.currentSpeaker && alivePlayers.includes(window.currentSpeaker)) {
+                startIdx = alivePlayers.indexOf(window.currentSpeaker);
+            } else {
+                const randomStartPlayer = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+                startIdx = alivePlayers.indexOf(randomStartPlayer);
+            }
+
+            speakingList = [
+                ...alivePlayers.slice(startIdx),
+                ...alivePlayers.slice(0, startIdx)
+            ];
+
+            currentSpeakIdx = 0; 
+            startSpeakerTurn();
+        }
+
+        function startVotePhase() {
+            clearInterval(speechTimer);
+            isVotePhase = true;
+            isPkVotePhase = false;
+            canEliminate = false; 
+
+            const finishBtn = document.getElementById('speakFinishBtn');
+            if (finishBtn) finishBtn.onclick = () => {};
+            
+            document.querySelectorAll('.player-slot').forEach(s => s.classList.remove('vote-targeted'));
+            
+            if (audioList['vote']) {
+                audioList['vote'].currentTime = 0;
+                audioList['vote'].play().catch(e => console.log(e));
+            }
+            
+            const confBtn = document.getElementById('confirmVoteBtn');
+            if (confBtn) confBtn.style.display = 'inline-block';
+
+            speechTimeLeft = 30; 
+            const display = document.getElementById('countdown-display');
+            if (display) {
+                display.innerText = speechTimeLeft;
+                display.style.display = 'block';
+            }
+            
+            clearInterval(voteTimer);
+            voteTimer = setInterval(() => {
+                speechTimeLeft--;
+                if (display) display.innerText = speechTimeLeft;
+                
+                if (speechTimeLeft <= 0) {
+                    clearInterval(voteTimer);
+                    if (display) display.style.display = 'none';
+                }
+            }, 1000);
+        }
+
+        function startSpeakerTurn() {
+            if (currentSpeakIdx >= speakingList.length) {
+                clearInterval(speechTimer);
+                const display = document.getElementById('countdown-display');
+                if (display) display.style.display = 'none';
+                startVotePhase();
+                return;
+            }
+
+            clearInterval(speechTimer); 
+            const playerNum = speakingList[currentSpeakIdx];
+            
+            console.log(`現在輪到 ${playerNum} 號玩家發言`);
+
+            const numAudio = audioList[`number${playerNum}`];
+            const speakAudio = audioList[`startspeak`];
+
+            if (numAudio && speakAudio) {
+                numAudio.currentTime = 0;
+                numAudio.play()
+                    .then(() => {
+                        numAudio.onended = () => {
+                            speakAudio.currentTime = 0;
+                            speakAudio.play().catch(e => console.log(e));
+                        };
+                    })
+                    .catch(e => console.log("音效播放被攔截：", e));
+            }
+
+            speechTimeLeft = 60;
+            const display = document.getElementById('countdown-display');
+            if (display) {
+                display.innerText = speechTimeLeft;
+                display.style.display = 'block';
+
+                speechTimer = setInterval(() => {
+                    speechTimeLeft--;
+                    display.innerText = speechTimeLeft;
+
+                    if (speechTimeLeft <= 0) {
+                        clearInterval(speechTimer);
+                        nextSpeaker();
+                    }
+                }, 1000);
+            }
+        }
+
+      function nextSpeaker() {
+            clearInterval(speechTimer); 
+            if (currentSpeakIdx >= 0 && currentSpeakIdx < speakingList.length) {
+                const lastPlayerNum = speakingList[currentSpeakIdx];
+                if (audioList[`number${lastPlayerNum}`]) audioList[`number${lastPlayerNum}`].pause();
+            }
+            if (audioList[`startspeak`]) audioList[`startspeak`].pause();
+
+            currentSpeakIdx++;
+            
+            if (currentSpeakIdx < speakingList.length) {
+                startSpeakerTurn();
+            } else {
+                console.log("發言完畢，進入投票環節");
+                const countdown = document.getElementById('countdown-display');
+                if (countdown) countdown.style.display = 'none';
+                document.querySelectorAll('.player-slot').forEach(slot => {
+                    slot.classList.remove('is-speaking');
+                });
+                startVotePhase(); 
+            }
+        }
+
+        function startWolfCountdown() {
+            isWolfTurn = true;
+            wolfSelected = false;
+            let count = 10;
+            const display = document.getElementById('countdown-display');
+            display.innerText = count;
+            display.style.display = 'block';
+            wolfTimer = setInterval(() => {
+                count--;
+                display.innerText = count;
+                if (count <= 0 || wolfSelected) {
+                    clearInterval(voteTimer);
+                    clearInterval(wolfTimer);
+                    endWolfPhase();
+                }
+            }, 1000);
+        }
+
+        async function endWolfPhase() {
+            isWolfTurn = false;
+            document.getElementById('countdown-display').style.display = 'none';
+            const target = document.querySelector('.wolf-target');
+            lastWolfTarget = target ? target.id : null; 
+            document.querySelectorAll('.player-slot').forEach(s => s.classList.remove('wolf-target'));
+            await wait(2000);
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById(`p${i}`).classList.remove('is-flipped');
+            }
+            playSound('wolfclose');
+        }
+
+        function handleSlotClick(element) {
+            if (!isGameStarted) return;
+            
+            const playerIdx = parseInt(element.id.replace('p', ''));
+
+            if (isVotePhase) {
+                if (element.classList.contains('eliminated')) return;
+                element.classList.toggle('vote-targeted');
+                return;
+            }
+
+            if (isPkVotePhase) {
+                if (element.classList.contains('eliminated')) return;
+                if (!pkPlayers.includes(playerIdx)) return;
+                element.classList.toggle('vote-targeted');
+                return;
+            }
+
+            if (isWolfTurn) {
+                if (element.classList.contains('eliminated')) return; 
+                if (element.classList.contains('wolf-target')) {
+                    element.classList.remove('wolf-target'); 
+                } else {
+                    document.querySelectorAll('.player-slot').forEach(s => s.classList.remove('wolf-target'));
+                    element.classList.add('wolf-target');
+                    wolfSelected = true; 
+                }
+                return; 
+            }
+
+            if (canPoisonClick) {
+                if (element.classList.contains('eliminated')) {
+                    alert("不能毒殺已經死掉的玩家！");
+                    return;
+                }
+                clearInterval(witchTimer); 
+                if(document.getElementById('countdown-display')) {
+                    document.getElementById('countdown-display').style.display = 'none';
+                }
+                poisonTarget = element.id; 
+                finishWitchTurn(); 
+                return;
+            }
+
+            if (isProphetTurn) {
+                if (prophetSelected) return; 
+                
+                clearInterval(prophetTimer); 
+                document.getElementById('countdown-display').style.display = 'none';
+                prophetSelected = true;
+
+                const pIdx = playerIdx - 1;
+                const role = roleData[pIdx];
+                const statusLabel = element.querySelector('.status-label');
+
+                playSound('heis');
+
+                if (role === 'werewolf.jpg') {
+                    statusLabel.innerText = "狼人";
+                    statusLabel.style.color = "#ff4b2b"; 
+                } else {
+                    statusLabel.innerText = "好人";
+                    statusLabel.style.color = "#00d4ff"; 
+                }
+
+                statusLabel.style.fontWeight = "900";          
+                statusLabel.style.fontSize = "3.2rem";          
+                statusLabel.style.writingMode = "vertical-rl";  
+                statusLabel.style.textOrientation = "upright";   
+                statusLabel.style.letterSpacing = "10px";       
+
+                statusLabel.style.position = "absolute";
+                statusLabel.style.top = "0";
+                statusLabel.style.left = "0";
+                statusLabel.style.width = "100%";
+                statusLabel.style.height = "100%";
+                statusLabel.style.display = "flex";
+                statusLabel.style.justifyContent = "center";
+                statusLabel.style.alignItems = "center";
+                statusLabel.style.backgroundColor = "rgba(16, 16, 32, 0.95)"; 
+                statusLabel.style.borderRadius = "13px";       
+                statusLabel.style.zIndex = "100";              
+
+                setTimeout(() => {
+                    if (element.classList.contains('eliminated')) {
+                        statusLabel.innerText = "已出局";
+                    } else {
+                        statusLabel.innerText = "生存";
+                    }
+                    
+                    statusLabel.style.color = "#888"; 
+                    statusLabel.style.fontSize = "0.8rem";
+                    statusLabel.style.fontWeight = "normal";
+                    statusLabel.style.writingMode = "horizontal-tb"; 
+                    statusLabel.style.letterSpacing = "normal";
+                    
+                    statusLabel.style.display = "block";              
+                    statusLabel.style.backgroundColor = "transparent"; 
+                    statusLabel.style.position = "absolute";
+                    statusLabel.style.top = "";                       
+                    statusLabel.style.left = "";
+                    statusLabel.style.width = "";
+                    statusLabel.style.height = "";
+                    statusLabel.style.borderRadius = "";
+                    statusLabel.style.zIndex = "";
+                    statusLabel.style.bottom = "8px";                  
+                    
+                    endProphetPhase();
+                }, 4000);
+
+                return;
+            }
+
+            if (canEliminate) {
+                if (element.classList.contains('eliminated') || element.classList.contains('is-speaking')) {
+                    element.className = `player-slot slot-${playerIdx}`; 
+                    element.querySelector('.status-label').innerText = "生存";
+                } else {
+                    let choice = confirm(`您要如何處理 ${playerIdx} 號玩家？\n【確定】：進入「發表遺言狀態」(有語音/倒數)\n【取消】：直接標記「已出局」(無遺言)`);
+                    if (choice) {
+                        currentVoteVictimNum = playerIdx;
+                        startLastWord(playerIdx);
+                    } else {
+                        element.classList.add('eliminated');
+                        element.querySelector('.status-label').innerText = "已出局";
+                        if (lastWolfTarget === element.id) lastWolfTarget = null;
+                        if (poisonTarget === element.id) poisonTarget = null;
+                        checkGameResult();
+                    }
+                }
+            }
+        }
+
+        function startLastWord(targetNum) {
+            const slot = document.getElementById(`p${targetNum}`);
+            if (slot) {
+                slot.className = `player-slot slot-${targetNum} is-speaking`;
+                slot.querySelector('.status-label').innerText = "發表遺言";
+            }
+
+            const numAudio = audioList[`number${targetNum}`];
+            const lastwordAudio = audioList[`lastword`];
+
+            if (numAudio && lastwordAudio) {
+                numAudio.currentTime = 0;
+                numAudio.play().then(() => {
+                    numAudio.onended = () => {
+                        lastwordAudio.currentTime = 0;
+                        lastwordAudio.play().catch(e => console.log(e));
+                    };
+                }).catch(e => console.log(e));
+            } else if (lastwordAudio) {
+                lastwordAudio.currentTime = 0;
+                lastwordAudio.play().catch(e => console.log(e));
+            }
+            
+            speechTimeLeft = 60;
+            const display = document.getElementById('countdown-display');
+            if (display) {
+                display.innerText = speechTimeLeft;
+                display.style.display = 'block';
+            }
+            
+            const finishBtn = document.getElementById('speakFinishBtn');
+            if (finishBtn) {
+                finishBtn.onclick = function() {
+                    stopLastWordDiscussion();
+                };
+            }
+            
+            clearInterval(voteTimer);
+            voteTimer = setInterval(() => {
+                speechTimeLeft--;
+                if (display) display.innerText = speechTimeLeft;
+                
+                if (speechTimeLeft <= 0) {
+                    stopLastWordDiscussion();
+                }
+            }, 1000);
+        }
+
+      function stopLastWordDiscussion() {
+            clearInterval(voteTimer);
+            const display = document.getElementById('countdown-display');
+            if (display) display.style.display = 'none';
+
+            if (audioList['disuse']) {
+                audioList['disuse'].onended = null; 
+                audioList['disuse'].currentTime = 0;
+                audioList['disuse'].play().catch(e => console.log(e));
+            }
+            
+            if (currentVoteVictimNum) {
+                const slot = document.getElementById(`p${currentVoteVictimNum}`);
+                if (slot) {
+                    slot.classList.remove('is-speaking');
+                    slot.classList.add('eliminated');
+                    slot.querySelector('.status-label').innerText = "投票流放";
+                }
+            }
+            
+            alert("遺言結束！請點擊「天黑請閉眼」進入下一夜。");
+            
+            const finishBtn = document.getElementById('speakFinishBtn');
+            if (finishBtn) finishBtn.onclick = () => {};
+            
+            currentVoteVictimNum = null;
+            checkGameResult(); 
+        }
+
+       function checkGameResult() {
+            if (!isGameStarted) return false;
+
+            let wolfAlive = 0;
+            let godAlive = 0;
+            let villagerAlive = 0;
+
+            for (let i = 1; i <= 6; i++) {
+                const slot = document.getElementById(`p${i}`);
+                if (slot && !slot.classList.contains('eliminated')) {
+                    const role = roleData[i - 1];
+                    if (role === 'werewolf.jpg') {
+                        wolfAlive++;
+                    } else if (role === 'prophet.jpg' || role === 'witch.jpg') {
+                        godAlive++;
+                    } else if (role === 'civilian.jpg') {
+                        villagerAlive++;
+                    }
+                }
+            }
+
+            if (wolfAlive === 0) {
+                showFinalResult("好人陣營獲勝", "goodwin");
+                return true;
+            }
+            if (godAlive === 0 || villagerAlive === 0) {
+                showFinalResult("狼人陣營獲勝", "wolfwin");
+                return true;
+            }
+
+            return false;
+        }
+
+        function showFinalResult(text, winSound) {
+            isGameStarted = false;
+            clearInterval(speechTimer);
+            clearInterval(voteTimer);
+            if(document.getElementById('countdown-display')) {
+                document.getElementById('countdown-display').style.display = 'none';
+            }
+
+            if (audioList.bgm) audioList.bgm.pause();
+            
+            if (audioList['gameover']) {
+                audioList['gameover'].currentTime = 0;
+                audioList['gameover'].play().catch(e => console.log(e));
+            }
+
+            setTimeout(() => {
+                if (audioList[winSound]) {
+                    audioList[winSound].currentTime = 0;
+                    audioList[winSound].play().catch(e => console.log(e));
+                }
+            }, 1000);
+
+            for (let i = 1; i <= 6; i++) {
+                const slot = document.getElementById(`p${i}`);
+                if (slot) slot.classList.add('is-flipped');
+            }
+
+            const overlay = document.getElementById('game-result-overlay');
+            const textEl = document.getElementById('result-text');
+            
+            if (textEl && overlay) {
+                textEl.innerText = text;
+                if (winSound === 'goodwin') {
+                    textEl.className = "good-win-style";
+                    overlay.style.backgroundColor = "rgba(0, 20, 50, 0.95)";
+                } else {
+                    textEl.className = "wolf-win-style";
+                    overlay.style.backgroundColor = "rgba(40, 0, 0, 0.95)";
+                }
+
+                overlay.style.display = "flex";
+                overlay.onclick = function() {
+                    overlay.style.display = "none";
+                    const startBtn = document.getElementById('startBtn');
+                    if (startBtn) startBtn.innerText = "🔮 隨機分配身分 (蓋牌)";
+                };
+            }
+        }
+
+        function assignRoles() { 
+            // 🎯 精確配置 6 人局身分
+            const roles = ['werewolf.jpg','werewolf.jpg','prophet.jpg','witch.jpg','civilian.jpg','civilian.jpg']; 
+            for (let i = roles.length - 1; i > 0; i--) { 
+                const j = Math.floor(Math.random() * (i + 1)); 
+                [roles[i], roles[j]] = [roles[j], roles[i]]; 
+            }
+            roleData = roles; 
+            for(let i=1; i<=6; i++) { 
+                const slot = document.getElementById(`p${i}`); 
+                slot.className = `player-slot slot-${i}`; 
+                slot.querySelector('.card-img').src = roleData[i-1]; 
+                slot.querySelector('.status-label').innerText = ""; 
+            }
+            
+            nightCount = 0; 
+            witchHasCure = true; 
+            witchHasPoison = true; 
+            poisonTarget = null; 
+            lastWolfTarget = null; 
+            canPoisonClick = false; 
+            witchUsedCureThisNight = false; 
+            document.getElementById('nightBtn').innerText = "天黑請閉眼"; 
+            
+            if (speechTimer) clearInterval(speechTimer);  
+            speakingList = []; 
+            currentSpeakIdx = -1; 
+            speechTimeLeft = 60; 
+            const display = document.getElementById('countdown-display'); 
+            if (display) display.style.display = 'none';  
+            
+            document.getElementById('startBtn').style.display = 'inline-block'; 
+            document.getElementById('startBtn').innerText = "⚔️ 確認完畢，開始遊戲"; 
+            isGameStarted = false; 
+            if (voteTimer) clearInterval(voteTimer); 
+            isVotePhase = false; 
+            currentVoteVictimNum = null;
+
+            const roleChineseName = {
+                'werewolf.jpg': '🐺 狼人',
+                'prophet.jpg': '🔮 預言家',
+                'witch.jpg': '🧪 女巫',
+                'civilian.jpg': '🧑‍🌾 平民'
+            };
+
+            const debugTable = roleData.map((role, index) => {
+                return {
+                    '玩家號碼': `${index + 1} 號`,
+                    '分配身分': roleChineseName[role] || role
+                };
+            });
+
+            console.clear(); 
+            console.log("%c🔮 【大威老師旁白系統 - 6人局除錯面板】 🔮", "color: #ff9800; font-size: 16px; font-weight: bold; background: #222; padding: 5px 10px; border-radius: 5px;");
+            console.table(debugTable); 
+        }
+
+        function startGame() {
+            isGameStarted = true;
+            playSound('gameplay');
+            for(let i=1; i<=6; i++) {
+                const slot = document.getElementById(`p${i}`);
+                slot.className = `player-slot slot-${i}`;
+                slot.querySelector('.status-label').innerText = "生存";
+            }
+            document.getElementById('startBtn').innerText = "遊戲進行中...";
+        }
+
+        async function autoConfirmIdentity() {
+            if (roleData.length === 0) return alert("請先分配身分！");
+            playSound('confirmid');
+            for (let i = 1; i <= 6; i++) {
+                await wait(3000); 
+                playSound(`number${i}`); 
+                await wait(500); 
+                playSound('openeyes'); 
+                document.getElementById(`p${i}`).classList.add('is-flipped'); 
+                await wait(3000); 
+                document.getElementById(`p${i}`).classList.remove('is-flipped'); 
+                playSound('closeeyes'); 
+                await wait(1000); 
+            }
+        }
+
+function confirmVoteResult() {
+    const selectedSlots = document.querySelectorAll('.vote-targeted');
+    let selectedNums = [];
+    selectedSlots.forEach(slot => {
+        selectedNums.push(parseInt(slot.id.replace('p', '')));
+    });
+
+    // ─── 🛠️ 這裡修改：沒點到人（0人選中）的處理邏輯 ───
+    if (selectedNums.length === 0) {
+        // 1. 停止 30 秒倒數計時器
+        clearInterval(voteTimer);
+        
+        // 2. 隱藏倒數顯示
+        if (document.getElementById('countdown-display')) {
+            document.getElementById('countdown-display').style.display = 'none';
+        }
+        
+        // 3. 隱藏確認投票按鈕
+        const confBtn = document.getElementById('confirmVoteBtn');
+        if (confBtn) confBtn.style.display = 'none';
+
+        // 4. 跳出提示告知主持人
+        alert("確認投票結果：本輪無人出局！不進入遺言階段。\n系統已解鎖，請主持人引導並點擊「天黑請閉眼」。");
+
+        // 5. 強制關閉所有投票狀態，重設變數，等待進入天黑
+        isVotePhase = false;
+        isPkVotePhase = false;
+        pkRoundCount = 0; 
+        currentVoteVictimNum = null;
+
+        return; // 關鍵：直接結束函式，不往下走有人出局的 executeVoteElimination 邏輯
+    }
+    // ───────────────────────────────────────────────
+
+    // 以下為你原本的計時器與按鈕隱藏代碼（保留給有人被選中的情況）
+    clearInterval(voteTimer);
+    if (document.getElementById('countdown-display')) {
+        document.getElementById('countdown-display').style.display = 'none';
+    }
+    const confBtn = document.getElementById('confirmVoteBtn');
+    if (confBtn) confBtn.style.display = 'none';
+
+    selectedSlots.forEach(slot => slot.classList.remove('vote-targeted'));
+
+    // 【情況一】剛好一人出局，進入遺言
+    if (selectedNums.length === 1) {
+        const targetIdx = selectedNums[0];
+        isVotePhase = false;
+        isPkVotePhase = false;
+        pkRoundCount = 0; 
+        
+        executeVoteElimination(targetIdx);
+        return;
+    }
+
+    // 【情況二】多人平票，觸發 PK 賽或再次平票直接流放
+    if (selectedNums.length > 1) {
+        pkRoundCount++;
+        
+        if (pkRoundCount >= 2) {
+            alert(`【再次平票！】${selectedNums.join(', ')}號 玩家再度平票！\n根據規則，此輪流放無人出局，直接進入天黑。`);
+            pkRoundCount = 0;
+            isVotePhase = false;
+            isPkVotePhase = false;
+            currentVoteVictimNum = null;
+            const finishBtn = document.getElementById('speakFinishBtn');
+            if (finishBtn) finishBtn.onclick = null;
+            return;
+        }
+
+        pkPlayers = selectedNums;
+        alert(`【觸發平票 PK 賽！】\n${pkPlayers.join(', ')} 號玩家得票相同，進入 PK 辯解環節！\n平票玩家將依次進行 60 秒發言。`);
+        
+        isVotePhase = false;
+        isPkVotePhase = false; 
+        
+        currentSpeakIdx = 0;
+        startPkSpeakerTurn();
+    }
+}
+
+       function executeVoteElimination(playerIdx) {
+            const slot = document.getElementById(`p${playerIdx}`);
+            slot.classList.add('is-speaking');
+            slot.querySelector('.status-label').innerText = "發表遺言";
+            currentVoteVictimNum = playerIdx; 
+            startLastWord(playerIdx);
+        }
+
+        function startPkSpeakerTurn() {
+            if (currentSpeakIdx >= pkPlayers.length) {
+                clearInterval(speechTimer);
+                if (document.getElementById('countdown-display')) {
+                    document.getElementById('countdown-display').style.display = 'none';
+                }
+                document.querySelectorAll('.player-slot').forEach(s => s.classList.remove('is-pk-speaking'));
+                startPkVotePhase();
+                return;
+            }
+
+            clearInterval(speechTimer);
+            document.querySelectorAll('.player-slot').forEach(s => s.classList.remove('is-pk-speaking'));
+            
+            const playerNum = pkPlayers[currentSpeakIdx];
+            const slot = document.getElementById(`p${playerNum}`);
+            if (slot) slot.classList.add('is-pk-speaking');
+
+            console.log(`【PK發言】輪到 ${playerNum} 號玩家發言`);
+
+            const numAudio = audioList[`number${playerNum}`];
+            const speakAudio = audioList[`startspeak`];
+            if (numAudio && speakAudio) {
+                numAudio.currentTime = 0;
+                numAudio.play().then(() => {
+                    numAudio.onended = () => {
+                        speakAudio.currentTime = 0;
+                        speakAudio.play().catch(e => console.log(e));
+                    };
+                }).catch(e => console.log(e));
+            }
+
+            const finishBtn = document.getElementById('speakFinishBtn');
+            if (finishBtn) {
+                finishBtn.onclick = function() {
+                    nextPkSpeaker();
+                };
+            }
+
+            speechTimeLeft = 60; 
+            const display = document.getElementById('countdown-display');
+            if (display) {
+                display.innerText = speechTimeLeft;
+                display.style.display = 'block';
+
+                speechTimer = setInterval(() => {
+                    speechTimeLeft--;
+                    display.innerText = speechTimeLeft;
+                    if (speechTimeLeft <= 0) {
+                        clearInterval(speechTimer);
+                        nextPkSpeaker();
+                    }
+                }, 1000);
+            }
+        }
+
+        function nextPkSpeaker() {
+            clearInterval(speechTimer);
+            currentSpeakIdx++;
+            startPkSpeakerTurn();
+        }
+
+ function startPkVotePhase() {
+    isVotePhase = false;
+    isPkVotePhase = true; 
+    canEliminate = false;
+
+    if (audioList['vote']) {
+        audioList['vote'].currentTime = 0;
+        audioList['vote'].play().catch(e => console.log(e));
+    }
+
+    const confBtn = document.getElementById('confirmVoteBtn');
+    if (confBtn) confBtn.style.display = 'inline-block';
+
+    speechTimeLeft = 30;
+    const display = document.getElementById('countdown-display');
+    if (display) {
+        display.innerText = speechTimeLeft;
+        display.style.display = 'block';
+    }
+
+    clearInterval(voteTimer);
+    voteTimer = setInterval(() => {
+        speechTimeLeft--;
+        if (display) display.innerText = speechTimeLeft;
+        if (speechTimeLeft <= 0) {
+            clearInterval(voteTimer);
+            if (display) display.style.display = 'none';
+
+            // ====== 🛠️ 以下為新增的修復與防呆邏輯 ======
+            
+            // 1. 隱藏確認投票按鈕，避免時間到後被誤點引發錯誤
+            if (confBtn) confBtn.style.display = 'none';
+
+            // 2. 強制關閉所有投票與淘汰狀態，讓系統恢復正常，等待主持人點擊天黑
+            isVotePhase = false;
+            isPkVotePhase = false;
+            canEliminate = false;
+
+            // 3. 清除畫面上可能殘留的玩家選取視覺效果（例如點選框）
+            // 註：這行會根據你的 CSS 設計移除選取狀態，若沒用到選取類名可安全保留或刪除
+            document.querySelectorAll('.player-card, .player-btn').forEach(el => el.classList.remove('selected'));
+
+            // 4. 跳出提示，告訴主持人可以直接進行下一步
+            alert("30秒投票時間到！無人被選出，本輪無人淘汰。請主持人引導並點擊「天黑請閉眼」。");
+            
+            // ==========================================
+        }
+    }, 1000);
+}
+    </script>
+</body>
+</html>
